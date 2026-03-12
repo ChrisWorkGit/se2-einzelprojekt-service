@@ -5,9 +5,13 @@ import at.aau.serg.services.GameResultService
 import org.junit.jupiter.api.BeforeEach
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.mockito.Mockito.`when` as whenever // when is a reserved keyword in Kotlin
+import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
+import org.springframework.web.server.ResponseStatusException
+import org.springframework.http.HttpStatus
+
 
 class LeaderboardControllerTests {
 
@@ -28,14 +32,12 @@ class LeaderboardControllerTests {
 
         whenever(mockedService.getGameResults()).thenReturn(listOf(second, first, third))
 
-        val res: List<GameResult> = controller.getLeaderboard()
+        val res: List<GameResult> = controller.getLeaderboard(null)
 
         verify(mockedService).getGameResults()
-        assertEquals(3, res.size)
-        assertEquals(first, res[0])
-        assertEquals(second, res[1])
-        assertEquals(third, res[2])
+        assertEquals(listOf(first, second, third), res)
     }
+
 
     @Test
     fun test_getLeaderboard_sameScore_CorrectTimeSorting() {
@@ -45,10 +47,36 @@ class LeaderboardControllerTests {
 
         whenever(mockedService.getGameResults()).thenReturn(listOf(first, second, third))
 
-        val res: List<GameResult> = controller.getLeaderboard()
+        val res: List<GameResult> = controller.getLeaderboard(null)
 
         verify(mockedService).getGameResults()
         assertEquals(listOf(second, third, first), res) // Score DESC, Time ASC
     }
 
+    @Test
+    fun test_getLeaderboard_rank_returnsCorrectSubset() {
+        val results = (1..10).map { GameResult(it.toLong(), "Player$it", 100 - it, it.toDouble()) }
+        whenever(mockedService.getGameResults()).thenReturn(results)
+
+        val rank = 5
+        val res = controller.getLeaderboard(rank)
+
+        val expected = results.subList(1, 8) // 3 vorher, Spieler 5, 3 danach
+        assertEquals(expected, res)
+    }
+    @Test
+    fun test_getLeaderboard_invalidRank_throwsException() {
+        val results = (1..5).map { GameResult(it.toLong(), "Player$it", 100 - it, it.toDouble()) }
+        whenever(mockedService.getGameResults()).thenReturn(results)
+
+        val exception1 = assertFailsWith<ResponseStatusException> {
+            controller.getLeaderboard(0)
+        }
+        assertEquals(HttpStatus.BAD_REQUEST, exception1.statusCode)
+
+        val exception2 = assertFailsWith<ResponseStatusException> {
+            controller.getLeaderboard(6)
+        }
+        assertEquals(HttpStatus.BAD_REQUEST, exception2.statusCode)
+    }
 }
